@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Number Game</title>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+<style>
+:root {
+    --primary: #6366f1;
+    --bg: #0f172a;
+    --card: #1e293b;
+    --text: #f8fafc;
+}
+
+body {
+    margin: 0;
+    font-family: Arial;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.container {
+    width: 400px;
+    background: var(--card);
+    padding: 20px;
+    border-radius: 12px;
+}
+
+.hidden { display: none; }
+
+input, button {
+    width: 100%;
+    padding: 10px;
+    margin: 6px 0;
+    border-radius: 8px;
+    border: none;
+}
+
+button {
+    background: var(--primary);
+    color: white;
+    cursor: pointer;
+}
+
+#chatLog {
+    height: 150px;
+    overflow-y: auto;
+    background: #020617;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.status {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- JOIN PAGE -->
+<div id="joinPage" class="container">
+    <h2>Join Game</h2>
+    <input id="username" placeholder="Your Name">
+    <input id="roomInput" placeholder="Room Name">
+    <button onclick="joinGame()">Join</button>
+</div>
+
+<!-- GAME PAGE -->
+<div id="gamePage" class="container hidden">
+
+    <div class="status" id="status">Connecting...</div>
+
+    <h3>Room: <span id="roomName"></span></h3>
+
+    <h4>Players</h4>
+    <ul id="playerList"></ul>
+
+    <h4>Pick Number</h4>
+    <input type="number" id="numberInput" placeholder="1 - 100">
+    <button onclick="sendNumber()">Submit</button>
+
+    <h4>Chat</h4>
+    <div id="chatLog"></div>
+    <input id="chatInput" placeholder="Type message...">
+    <button onclick="sendMessage()">Send</button>
+
+</div>
+
+<script>
+let socket;
+let myRoom = "";
+
+// 🚀 JOIN GAME
+function joinGame() {
+    const username = document.getElementById("username").value.trim();
+    const room = document.getElementById("roomInput").value.trim();
+
+    if (!username || !room) {
+        alert("Fill all fields");
+        return;
+    }
+
+    myRoom = room;
+
+    // 🔥 Connect to Render server
+    socket = io("https://chatserver-node.onrender.com", {
+        transports: ["websocket", "polling"]
+    });
+
+    document.getElementById("joinPage").classList.add("hidden");
+    document.getElementById("gamePage").classList.remove("hidden");
+    document.getElementById("roomName").innerText = room;
+
+    // CONNECTION EVENTS
+    socket.on("connect", () => {
+        setStatus("Connected ✅");
+
+        socket.emit("join_room", {
+            room: room,
+            username: username
+        });
+    });
+
+    socket.on("connect_error", () => {
+        setStatus("Connection failed ❌");
+    });
+
+    socket.on("disconnect", () => {
+        setStatus("Disconnected ⚠️");
+    });
+
+    // PLAYER LIST
+    socket.on("room_state", (data) => {
+        const list = document.getElementById("playerList");
+        list.innerHTML = "";
+
+        data.players.forEach(p => {
+            const li = document.createElement("li");
+            li.textContent = p.username;
+            list.appendChild(li);
+        });
+    });
+
+    // CHAT
+    socket.on("chat_message", (data) => {
+        addChat(`<b>${data.username}:</b> ${data.message}`);
+    });
+
+    // NUMBER EVENT
+    socket.on("display_number", (data) => {
+        addChat(`🎲 <b>${data.username}</b> chose ${data.number}`);
+    });
+
+    socket.on("room_full", () => {
+        alert("Room is full");
+    });
+}
+
+// 🎲 SEND NUMBER
+function sendNumber() {
+    const input = document.getElementById("numberInput");
+    const num = parseInt(input.value);
+
+    if (!num || num < 1 || num > 100) {
+        alert("Enter number 1-100");
+        return;
+    }
+
+    socket.emit("choose_number", { number: num });
+    input.value = "";
+}
+
+// 💬 SEND MESSAGE
+function sendMessage() {
+    const input = document.getElementById("chatInput");
+    const msg = input.value.trim();
+
+    if (!msg) return;
+
+    socket.emit("chat_message", { message: msg });
+    input.value = "";
+}
+
+// ⌨️ ENTER KEY SUPPORT
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        if (document.activeElement.id === "chatInput") {
+            sendMessage();
+        }
+    }
+});
+
+// 🧾 CHAT UI
+function addChat(text) {
+    const log = document.getElementById("chatLog");
+
+    const div = document.createElement("div");
+    div.innerHTML = text;
+
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+}
+
+// 📡 STATUS UI
+function setStatus(text) {
+    document.getElementById("status").innerText = text;
+}
+</script>
+
+</body>
+</html>
